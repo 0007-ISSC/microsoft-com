@@ -1,0 +1,10 @@
+{
+  "name": "UrbanFlow AI - Real-Time Urban Traffic Optimization",
+  "description": "Real-time urban traffic data analysis, adaptive signal optimization, congestion forecasting, incident dispatch, and GEN navigation assistant with Docker & CI/CD pipeline.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
