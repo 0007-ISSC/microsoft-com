@@ -52,6 +52,14 @@ import {
   setSoundEnabled, 
   isSoundEnabled 
 } from './utils/soundEffects';
+import { 
+  speakMajorIncidentAlert, 
+  speakIncidentClearance, 
+  speakPreemptionActivation, 
+  speakAnnouncement, 
+  onSpeechBroadcast 
+} from './utils/trafficSpeech';
+import { Megaphone, RotateCw } from 'lucide-react';
 
 export default function App() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
@@ -91,6 +99,21 @@ export default function App() {
   const [greenWaveSpeedMph, setGreenWaveSpeedMph] = useState<number>(34);
   const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  const [latestAudioAnnouncement, setLatestAudioAnnouncement] = useState<string | null>(null);
+  const [isSpeakingTts, setIsSpeakingTts] = useState<boolean>(false);
+
+  // Subscribe to real-time Web Speech API announcements
+  useEffect(() => {
+    const unsubscribe = onSpeechBroadcast((text) => {
+      setLatestAudioAnnouncement(text);
+      setIsSpeakingTts(true);
+      const timer = setTimeout(() => {
+        setIsSpeakingTts(false);
+      }, 5500);
+      return () => clearTimeout(timer);
+    });
+    return unsubscribe;
+  }, []);
 
   // REAL-TIME SIMULATION ENGINE
   useEffect(() => {
@@ -218,11 +241,13 @@ export default function App() {
 
     if (nextState) {
       setHighlightedCorridorIds(['corr-3-6', 'corr-6-9']);
+      speakPreemptionActivation('Grand Central Expressway and Eastern Arterial Corridor');
     } else {
       setHighlightedCorridorIds([]);
       setIntersections((prev) =>
         prev.map((n) => ({ ...n, mode: 'adaptive' }))
       );
+      speakAnnouncement('Emergency preemption cleared. All signalized intersections returned to coordinated Webster adaptive cycles.', false);
     }
   };
 
@@ -233,12 +258,38 @@ export default function App() {
       id: `inc-${Date.now()}`,
     };
     setIncidents((prev) => [incident, ...prev]);
+
+    // Real-time professional Web Speech API notification for major traffic incident
+    speakMajorIncidentAlert(
+      incident.title,
+      incident.locationName,
+      incident.severity,
+      incident.lanesBlocked,
+      incident.recommendedDetour
+    );
   };
 
   const handleResolveIncident = (id: string) => {
     playSuccessChime();
+    const incidentToClear = incidents.find((i) => i.id === id);
     setIncidents((prev) =>
       prev.map((inc) => (inc.id === id ? { ...inc, status: 'cleared' } : inc))
+    );
+
+    if (incidentToClear) {
+      speakIncidentClearance(incidentToClear.title, incidentToClear.locationName);
+    }
+  };
+
+  // Test action for immediate audio demonstration
+  const handleTestMajorIncidentTts = () => {
+    playHudClick();
+    speakMajorIncidentAlert(
+      'Multi-Vehicle Collision on Central Expressway',
+      'Broadway & Grand Avenue Junction',
+      'critical',
+      3,
+      'Divert eastbound traffic via 7th Avenue arterial to prevent gridlock.'
     );
   };
 
@@ -544,6 +595,16 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3 text-xs font-mono">
+            {/* Quick Button to Test Major Incident Real-Time Web Speech API Notification */}
+            <button
+              onClick={handleTestMajorIncidentTts}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/40 transition active:scale-95 cursor-pointer font-sans text-xs font-semibold"
+              title="Test Web Speech API Browser Audio Notification for Major Incidents"
+            >
+              <Megaphone className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
+              <span className="hidden sm:inline">Test Incident Audio</span>
+            </button>
+
             <div className="bg-slate-900 px-3 py-1 rounded-xl border border-slate-800 text-slate-300">
               Active Incidents: <span className="text-rose-400 font-bold">{incidents.filter((i) => i.status !== 'cleared').length}</span>
             </div>
@@ -552,6 +613,70 @@ export default function App() {
             </div>
           </div>
         </header>
+
+        {/* Dynamic Web Speech API Real-Time Audio Broadcast HUD */}
+        {latestAudioAnnouncement && (
+          <div className="mx-4 lg:mx-6 mt-4 bg-gradient-to-r from-cyan-950/90 via-slate-900/90 to-slate-950/90 border border-cyan-500/40 rounded-2xl p-3.5 shadow-2xl flex flex-wrap items-center justify-between gap-3 backdrop-blur-md">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-300 relative shrink-0">
+                <Volume2 className={`w-5 h-5 ${isSpeakingTts ? 'animate-pulse text-cyan-300' : 'text-cyan-400'}`} />
+                {isSpeakingTts && (
+                  <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-300"></span>
+                  </span>
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+                    <span>Web Speech API Live Audio Notification</span>
+                    {isSpeakingTts && (
+                      <span className="inline-flex gap-0.5 items-end h-2.5">
+                        <span className="w-0.5 h-1.5 bg-cyan-400 animate-pulse"></span>
+                        <span className="w-0.5 h-2.5 bg-cyan-400 animate-pulse delay-75"></span>
+                        <span className="w-0.5 h-1 bg-cyan-400 animate-pulse delay-150"></span>
+                        <span className="w-0.5 h-2 bg-cyan-400 animate-pulse"></span>
+                      </span>
+                    )}
+                  </span>
+                  <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded border ${
+                    isSpeakingTts 
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold'
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                  }`}>
+                    {isSpeakingTts ? 'TRANSMITTING ORAL BROADCAST' : 'BROADCAST LOGGED'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-200 font-medium truncate max-w-2xl mt-0.5">
+                  "{latestAudioAnnouncement}"
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => {
+                  playHudClick();
+                  speakAnnouncement(latestAudioAnnouncement, false);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 transition active:scale-95 cursor-pointer"
+                title="Replay Audio via Browser Speech Synthesis"
+              >
+                <RotateCw className="w-3.5 h-3.5" />
+                <span>Replay Oral Audio</span>
+              </button>
+
+              <button
+                onClick={() => setLatestAudioAnnouncement(null)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                title="Dismiss Broadcast Banner"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Main Workspace Body */}
         <main className="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto flex flex-col gap-6 overflow-y-auto">

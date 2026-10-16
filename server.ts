@@ -76,44 +76,60 @@ Personality & Format:
 - Keep responses engaging, accurate, and structured.
 ${contextSnippet}`;
 
-    // Check if API key is present
+    // Check if API key is present and attempt Gemini generation across available Flash models
     if (process.env.GEMINI_API_KEY) {
-      try {
-        // Construct conversation contents
-        const contents: any[] = [];
-        
-        // Add limited previous context
-        if (Array.isArray(history) && history.length > 0) {
-          const recentHistory = history.slice(-6);
-          for (const msg of recentHistory) {
+      // Prioritized candidate list: try fast, highly available models first
+      const CANDIDATE_MODELS = [
+        'gemini-3.6-flash',
+        'gemini-3.5-flash',
+        'gemini-3.5-flash-lite',
+        'gemini-3.8-flash',
+      ];
+
+      // Construct conversation contents
+      const contents: any[] = [];
+      
+      // Add limited previous context
+      if (Array.isArray(history) && history.length > 0) {
+        const recentHistory = history.slice(-6);
+        for (const msg of recentHistory) {
+          if (msg && msg.text) {
             contents.push({
               role: msg.role === 'user' ? 'user' : 'model',
               parts: [{ text: msg.text }],
             });
           }
         }
+      }
 
-        // Add current message
-        contents.push({
-          role: 'user',
-          parts: [{ text: message }],
-        });
+      // Add current message
+      contents.push({
+        role: 'user',
+        parts: [{ text: message }],
+      });
 
-        const response = await ai.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents,
-          config: {
-            systemInstruction,
-            temperature: 0.7,
-            topP: 0.9,
-          },
-        });
+      for (const modelCandidate of CANDIDATE_MODELS) {
+        try {
+          const response = await ai.models.generateContent({
+            model: modelCandidate,
+            contents,
+            config: {
+              systemInstruction,
+              temperature: 0.7,
+              topP: 0.9,
+            },
+          });
 
-        const replyText = response.text || 'I analyzed the traffic network, but received an empty response. Please try rephrasing.';
-        return res.json({ reply: replyText });
-      } catch (geminiError: any) {
-        console.warn('Gemini API call failed, falling back to rule-based traffic assistant:', geminiError?.message);
-        // Fallback gracefully to smart domain response
+          if (response && response.text) {
+            return res.json({ 
+              reply: response.text,
+              model: modelCandidate,
+              status: 'live' 
+            });
+          }
+        } catch (candidateError: any) {
+          console.warn(`Model ${modelCandidate} returned status ${candidateError?.status || 'error'}: ${candidateError?.message?.slice(0, 80)}. Trying next candidate...`);
+        }
       }
     }
 

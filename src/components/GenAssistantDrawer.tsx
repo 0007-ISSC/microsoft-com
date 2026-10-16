@@ -12,8 +12,11 @@ import {
   AlertTriangle, 
   Cpu, 
   ChevronRight,
-  ShieldAlert
+  ShieldAlert,
+  Zap
 } from 'lucide-react';
+import { speakAnnouncement } from '../utils/trafficSpeech';
+import { playHudClick, playSuccessChime } from '../utils/soundEffects';
 
 interface GenAssistantDrawerProps {
   isOpen: boolean;
@@ -50,6 +53,7 @@ I am actively monitoring **${corridors.length} urban corridors** and **${interse
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(true);
+  const [activeModel, setActiveModel] = useState<string>('gemini-3.6-flash');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -62,26 +66,18 @@ I am actively monitoring **${corridors.length} urban corridors** and **${interse
     }
   }, [messages, isOpen]);
 
-  // Voice readout helper
+  // Voice readout helper using unified Web Speech API TTS
   const speakText = (text: string) => {
-    if (!ttsEnabled || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-    try {
-      window.speechSynthesis.cancel();
-      // Strip markdown symbols for clean speech
-      const clean = text.replace(/[*#_`]/g, '').slice(0, 220);
-      const utterance = new SpeechSynthesisUtterance(clean);
-      utterance.rate = 1.05;
-      utterance.pitch = 1.0;
-      window.speechSynthesis.speak(utterance);
-    } catch {
-      // Ignore speech synthesis errors
-    }
+    if (!ttsEnabled) return;
+    const clean = text.replace(/[*#_`]/g, '').slice(0, 240);
+    speakAnnouncement(clean, false);
   };
 
   const handleSendMessage = async (textToSend?: string) => {
     const userQuery = (textToSend || input).trim();
     if (!userQuery || loading) return;
 
+    playHudClick();
     setInput('');
 
     const newMsg: ChatMessage = {
@@ -135,14 +131,33 @@ I am actively monitoring **${corridors.length} urban corridors** and **${interse
 
       const data = await response.json();
       const assistantReply = data.reply || 'No response generated.';
+      if (data.model) {
+        setActiveModel(data.model);
+      }
+
+      // Check if the response contains actionable instructions
+      let isActionable = false;
+      let actionType: ChatMessage['actionType'];
+      const lowerReply = assistantReply.toLowerCase();
+
+      if (lowerReply.includes('webster') || lowerReply.includes('optimize signal') || lowerReply.includes('timing split')) {
+        isActionable = true;
+        actionType = 'apply_optimization';
+      } else if (lowerReply.includes('preemption') || lowerReply.includes('emergency vehicle') || lowerReply.includes('evp')) {
+        isActionable = true;
+        actionType = 'trigger_preemption';
+      }
 
       const replyMsg: ChatMessage = {
         id: `a-${Date.now()}`,
         role: 'assistant',
         text: assistantReply,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isActionable,
+        actionType,
       };
 
+      playSuccessChime();
       setMessages((prev) => [...prev, replyMsg]);
       speakText(assistantReply);
     } catch (err) {
@@ -178,10 +193,11 @@ I am actively monitoring **${corridors.length} urban corridors** and **${interse
 
   const QUICK_PROMPTS = [
     { label: '👑 Creator & Head', query: 'Who is your creator, owner, and head engineer?' },
+    { label: '⚡ Optimize Signals Now', query: 'Apply Webster cycle adaptive optimization to reduce queue delay across all arterials.' },
+    { label: '🧭 Fastest Cross-Town Route', query: 'Provide the fastest navigation route from North Harbor to Central Station with delay comparisons.' },
     { label: '🚨 Active Bottlenecks', query: 'Where are the most critical traffic bottlenecks and incidents right now?' },
-    { label: '🧭 Fastest Cross-Town Route', query: 'Provide the fastest navigation route from North Harbor to the Medical Campus with delay comparisons.' },
-    { label: '🚥 Adaptive Signal Strategy', query: 'How is the Webster adaptive signal timing minimizing delay on Broadway?' },
     { label: '🚑 Preemption Status', query: 'What is the procedure and current state of Emergency Vehicle Preemption (EVP)?' },
+    { label: '🍃 Eco-Route & Emissions', query: 'Calculate estimated carbon emissions and fuel savings for green-wave routes.' },
   ];
 
   if (!isOpen) return null;
@@ -200,8 +216,9 @@ I am actively monitoring **${corridors.length} urban corridors** and **${interse
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-white text-base">GEN Assistant</h3>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
-                Gemini 3.8 Flash
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                <span>{activeModel.replace('models/', '')} AI Online</span>
               </span>
             </div>
             <p className="text-xs text-cyan-300/80 font-medium">Engineered by Iqra Sultana • Urban Flow AI</p>
@@ -270,18 +287,64 @@ I am actively monitoring **${corridors.length} urban corridors** and **${interse
                 {/* Format markdown-like text */}
                 <div className="space-y-1.5 whitespace-pre-line">
                   {msg.text.split('\n').map((line, idx) => {
-                    // Highlight bold lines or bullet lines
-                    if (line.startsWith('•') || line.startsWith('-')) {
+                    const trimmed = line.trim();
+                    if (trimmed.startsWith('### ')) {
+                      return (
+                        <h4 key={idx} className="font-bold text-cyan-300 text-xs mt-1 border-b border-slate-700/50 pb-0.5">
+                          {trimmed.replace('### ', '')}
+                        </h4>
+                      );
+                    }
+                    if (trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('* ')) {
                       return (
                         <div key={idx} className="flex items-start gap-1.5 pl-1 text-slate-200">
-                          <span className="text-cyan-400">•</span>
-                          <span>{line.replace(/^[•-]\s*/, '')}</span>
+                          <span className="text-cyan-400 font-bold">•</span>
+                          <span>{trimmed.replace(/^[•\-\*]\s*/, '')}</span>
+                        </div>
+                      );
+                    }
+                    if (/^\d+\.\s/.test(trimmed)) {
+                      return (
+                        <div key={idx} className="flex items-start gap-1.5 pl-1 text-slate-200">
+                          <span className="text-cyan-400 font-mono font-bold">{trimmed.slice(0, trimmed.indexOf('.') + 1)}</span>
+                          <span>{trimmed.slice(trimmed.indexOf('.') + 1).trim()}</span>
                         </div>
                       );
                     }
                     return <p key={idx}>{line}</p>;
                   })}
                 </div>
+
+                {/* Direct Action Trigger if GEN suggested optimization or preemption */}
+                {msg.isActionable && (
+                  <div className="mt-3 pt-2.5 border-t border-slate-800 flex flex-wrap gap-2">
+                    {msg.actionType === 'apply_optimization' && (
+                      <button
+                        onClick={() => {
+                          playSuccessChime();
+                          onTriggerOptimization?.();
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-md transition active:scale-95 cursor-pointer"
+                      >
+                        <Zap className="w-3.5 h-3.5 text-slate-950 fill-current" />
+                        <span>Apply Webster Signal Split to Grid</span>
+                      </button>
+                    )}
+
+                    {msg.actionType === 'trigger_preemption' && (
+                      <button
+                        onClick={() => {
+                          playSuccessChime();
+                          onTriggerPreemption?.();
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md transition active:scale-95 cursor-pointer"
+                      >
+                        <ShieldAlert className="w-3.5 h-3.5" />
+                        <span>Trigger EVP Emergency Wave</span>
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
               <span className="text-[10px] text-slate-400 font-mono mt-1 px-1">
                 {msg.timestamp}

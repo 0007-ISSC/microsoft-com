@@ -22,56 +22,126 @@ import {
   Lightbulb,
   Crosshair,
   TrendingUp,
-  Cpu
+  Cpu,
+  Search,
+  Download,
+  Filter,
+  Play,
+  Share2,
+  Calendar,
+  Clock,
+  Layers
 } from 'lucide-react';
 import { playHudClick, playRadarPing, playEmergencyAlert, playSuccessChime } from '../utils/soundEffects';
+import { speakAnnouncement } from '../utils/trafficSpeech';
 
-interface DetectionItem {
-  category: 'vehicle' | 'human' | 'signal' | 'road' | 'object' | 'risk';
-  label: string;
-  confidence: number;
-  coordinates: { x: number; y: number; w: number; h: number };
-  color: string;
-  telemetry: string;
-}
-
-interface VisionLogItem {
+export interface VisionLogItem {
   id: string;
   timestamp: string;
+  isoTime: string;
   category: 'vehicle' | 'human' | 'signal' | 'road' | 'object' | 'risk' | 'oral';
   title: string;
   detail: string;
+  oralSummary: string;
   severity: 'normal' | 'warning' | 'critical';
+  confidence: number;
+  trackId?: string;
+  metrics?: {
+    velocityMph?: number;
+    frictionMu?: number;
+    stoppingDistanceFt?: number;
+    pedestrianCount?: number;
+    headwaySec?: number;
+  };
 }
 
 export const CameraVisionModule: React.FC = () => {
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [oralInstructionsEnabled, setOralInstructionsEnabled] = useState(true);
-  const [voiceInputActive, setVoiceInputActive] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'vehicle' | 'human' | 'signal' | 'road' | 'risk' | 'oral'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [lastSpokenText, setLastSpokenText] = useState('Camera AI Vision standby. Turn on camera to commence comprehensive multi-modal detection.');
+  const [showExecutiveModal, setShowExecutiveModal] = useState(false);
+  const [playingLogId, setPlayingLogId] = useState<string | null>(null);
 
   // Live Multi-Modal Optical Stats
   const [visionStats, setVisionStats] = useState({
-    vehiclesCount: 16,
-    humansCount: 9,
+    vehiclesCount: 18,
+    humansCount: 12,
     signalState: 'GREEN (Phase 1)',
-    signalCountdown: 28,
-    roadCondition: 'DRY • $\\mu = 0.82$',
-    riskIndex: 'LOW (12%)',
-    objectsDetected: '0 Debris',
-    flowRateVph: 2480,
+    signalCountdown: 26,
+    roadCondition: 'DRY • μ = 0.84',
+    riskIndex: 'LOW (8%)',
+    objectsDetected: '0 Road Hazards',
+    flowRateVph: 2540,
   });
 
-  const [activeDetections, setActiveDetections] = useState<DetectionItem[]>([]);
+  // Seed with realistic, professional historical audit records
   const [logs, setLogs] = useState<VisionLogItem[]>([
     {
-      id: 'init-1',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      category: 'signal',
-      title: 'Optical Signal & Target Classifier Armed',
-      detail: 'Sensors ready to classify Vehicles, Roads, Signals, Population, Humans, Objects, and Collision Risk.',
+      id: 'audit-001',
+      timestamp: new Date(Date.now() - 36000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      isoTime: new Date(Date.now() - 36000).toISOString(),
+      category: 'vehicle',
+      title: 'Platoon Wave Velocity & Headway Verification',
+      detail: 'Multi-lane optical tracker logged 18 vehicles. Average velocity 34.6 mph with 2.4s headway between lead and trailing vehicles.',
+      oralSummary: 'Traffic sensor report. 18 vehicles tracked on arterial. Platoon velocity stable at 35 miles per hour with nominal spacing.',
       severity: 'normal',
+      confidence: 98.4,
+      trackId: 'PLT-8820',
+      metrics: { velocityMph: 34.6, headwaySec: 2.4 },
+    },
+    {
+      id: 'audit-002',
+      timestamp: new Date(Date.now() - 28000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      isoTime: new Date(Date.now() - 28000).toISOString(),
+      category: 'human',
+      title: 'Crosswalk Pedestrian Queue & Walk Phase Optimization',
+      detail: 'Optical census detected 14 pedestrians in the North-South crosswalk queue zone. Extended walk interval phase granted.',
+      oralSummary: 'Pedestrian density detected at North crosswalk. Activating pedestrian safety hold on right turn phases.',
+      severity: 'normal',
+      confidence: 96.8,
+      trackId: 'PED-4109',
+      metrics: { pedestrianCount: 14 },
+    },
+    {
+      id: 'audit-003',
+      timestamp: new Date(Date.now() - 20000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      isoTime: new Date(Date.now() - 20000).toISOString(),
+      category: 'signal',
+      title: 'Signal Gantry 04 Optical Phase Transition Audit',
+      detail: 'Signal head classified in Green progression. Approaching yellow clearance interval with Webster cycle balance at 105 seconds.',
+      oralSummary: 'Signal gantry recognized. Approaching yellow clearance phase in 6 seconds. Maintaining Webster progression balance.',
+      severity: 'normal',
+      confidence: 99.2,
+      trackId: 'SIG-GNT-04',
+    },
+    {
+      id: 'audit-004',
+      timestamp: new Date(Date.now() - 12000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      isoTime: new Date(Date.now() - 12000).toISOString(),
+      category: 'road',
+      title: 'Pavement Friction & Roadway Surface Inspection',
+      detail: 'Continuous infrared and optical texture scan indicates dry pavement conditions. Friction coefficient rated at μ = 0.84.',
+      oralSummary: 'Road surface scan complete. Lane boundaries clear, friction coefficient nominal with zero hydroplaning hazard.',
+      severity: 'normal',
+      confidence: 97.5,
+      trackId: 'RD-TEX-102',
+      metrics: { frictionMu: 0.84 },
+    },
+    {
+      id: 'audit-005',
+      timestamp: new Date(Date.now() - 5000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      isoTime: new Date(Date.now() - 5000).toISOString(),
+      category: 'risk',
+      title: 'Dynamic Stopping Distance & Collision Risk Audit',
+      detail: 'Stopping sight distances evaluated across all lanes. Deceleration threshold meets MUTCD standard; collision risk is Minimal at 8%.',
+      oralSummary: 'Collision risk assessment nominal. Vehicles maintaining standard stopping headway. Zero critical anomalies.',
+      severity: 'normal',
+      confidence: 98.9,
+      trackId: 'RSK-EVAL-07',
+      metrics: { stoppingDistanceFt: 68 },
     },
   ]);
 
@@ -80,20 +150,15 @@ export const CameraVisionModule: React.FC = () => {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
-  // Professional Oral Voice Synthesizer
-  const speakOralResponse = (text: string) => {
-    if (!oralInstructionsEnabled || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-    try {
-      window.speechSynthesis.cancel();
-      setLastSpokenText(text);
-      const clean = text.replace(/[*#_`]/g, '');
-      const utterance = new SpeechSynthesisUtterance(clean);
-      utterance.rate = 1.05;
-      utterance.pitch = 1.0;
-      window.speechSynthesis.speak(utterance);
-    } catch (e) {
-      console.warn('Speech error:', e);
-    }
+  // Play an oral summary for a specific log item
+  const handlePlayLogOral = (item: VisionLogItem) => {
+    playHudClick();
+    setPlayingLogId(item.id);
+    setLastSpokenText(item.oralSummary);
+    speakAnnouncement(item.oralSummary, false);
+    setTimeout(() => {
+      setPlayingLogId(null);
+    }, 4500);
   };
 
   // Start Camera
@@ -120,8 +185,18 @@ export const CameraVisionModule: React.FC = () => {
       playRadarPing();
 
       const welcomeOral = 'Camera AI Optical Sensor online. Real-time multi-modal monitoring initialized for vehicles, roads, signals, population, objects, and collision risk.';
-      addLog('oral', 'Vision Sensor Activated', welcomeOral, 'normal');
-      speakOralResponse(welcomeOral);
+      addLogEntry({
+        category: 'oral',
+        title: 'Optical Sensor Online & Stream Initialized',
+        detail: 'Hardware stream established at 1080p 30fps. Optical neural detectors calibrated.',
+        oralSummary: welcomeOral,
+        severity: 'normal',
+        confidence: 99.8,
+      });
+
+      if (oralInstructionsEnabled) {
+        speakAnnouncement(welcomeOral, true);
+      }
     } catch (err: any) {
       console.error('Camera access error:', err);
       setCameraError(
@@ -146,27 +221,27 @@ export const CameraVisionModule: React.FC = () => {
       cancelAnimationFrame(animationFrameRef.current);
     }
     setIsCameraActive(false);
-    addLog('safety' as any, 'Camera Stream Offline', 'Camera optical monitoring paused by operator.', 'normal');
+    addLogEntry({
+      category: 'oral',
+      title: 'Camera Optical Stream Deactivated',
+      detail: 'Real-time camera optical monitoring halted by operator action.',
+      oralSummary: 'Camera optical sensor deactivated. Standby mode armed.',
+      severity: 'normal',
+      confidence: 100,
+    });
   };
 
-  const addLog = (
-    category: VisionLogItem['category'],
-    title: string,
-    detail: string,
-    severity: VisionLogItem['severity']
-  ) => {
-    const item: VisionLogItem = {
-      id: `log-${Date.now()}-${Math.random()}`,
+  const addLogEntry = (itemData: Omit<VisionLogItem, 'id' | 'timestamp' | 'isoTime'>) => {
+    const newItem: VisionLogItem = {
+      ...itemData,
+      id: `audit-${Date.now().toString().slice(-6)}`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      category,
-      title,
-      detail,
-      severity,
+      isoTime: new Date().toISOString(),
     };
-    setLogs((prev) => [item, ...prev.slice(0, 40)]);
+    setLogs((prev) => [newItem, ...prev.slice(0, 60)]);
   };
 
-  // Periodic AI Multi-Modal Detection & Professional Oral Updates
+  // Automated Periodic Detection Loop
   useEffect(() => {
     if (!isCameraActive) return;
 
@@ -174,78 +249,71 @@ export const CameraVisionModule: React.FC = () => {
     const interval = setInterval(() => {
       cycleCount++;
 
-      // Professional scripted oral broadcasts covering all user-requested targets:
-      const broadcastScenarios = [
+      const scenarios: Array<Omit<VisionLogItem, 'id' | 'timestamp' | 'isoTime'>> = [
         {
-          category: 'vehicle' as const,
-          title: 'Vehicle Fleet Platoon Assessment',
-          detail: 'Detected 18 vehicles (11 Sedans, 3 Transit Buses, 3 Commercial Trucks, 1 Emergency Ambulance). Average velocity 34.6 mph.',
-          speech: 'Traffic sensor report. 18 vehicles tracked on main arterial. Platoon velocity stable at 35 miles per hour.',
-          severity: 'normal' as const,
-          stats: { vehicles: 18, humans: 8, signal: 'GREEN (Phase 1)', countdown: 22, road: 'DRY • μ = 0.84', risk: 'LOW (8%)' },
+          category: 'vehicle',
+          title: 'Platoon Wave Velocity & Trajectory Inspection',
+          detail: 'Tracked 19 vehicles traversing Arterial Sector 4. Velocity progression logged at 35.8 mph with zero lane drift.',
+          oralSummary: 'Traffic operations report. 19 vehicles tracked on main arterial. Platoon velocity stable at 36 miles per hour.',
+          severity: 'normal',
+          confidence: 98.6,
+          trackId: `PLT-${2000 + cycleCount}`,
+          metrics: { velocityMph: 35.8, headwaySec: 2.3 },
         },
         {
-          category: 'human' as const,
-          title: 'Pedestrian & Population Density Scan',
-          detail: '14 pedestrians detected waiting at Crosswalk 2. Walk interval armed. Clearance safety index at 99.1%.',
-          speech: 'Pedestrian cluster detected at North crosswalk. Activating pedestrian safety hold on right turn phases.',
-          severity: 'normal' as const,
-          stats: { vehicles: 15, humans: 14, signal: 'GREEN (Pedestrian Split)', countdown: 16, road: 'DRY • μ = 0.83', risk: 'LOW (11%)' },
+          category: 'human',
+          title: 'Pedestrian Crossing Safety Audit',
+          detail: '12 pedestrians classified at intersection crossing. Crosswalk illumination optimal. Collision probability 0.02%.',
+          oralSummary: 'Pedestrian crossing status nominal. 12 pedestrians in crosswalk queue with protected pedestrian interval active.',
+          severity: 'normal',
+          confidence: 97.2,
+          trackId: `PED-${3000 + cycleCount}`,
+          metrics: { pedestrianCount: 12 },
         },
         {
-          category: 'signal' as const,
-          title: 'Signal Timing & Phase Recognition',
-          detail: 'Signal Gantry 04 detected in GREEN state. Webster adaptive cycle calculated at 105s, queue clearance progressing on schedule.',
-          speech: 'Signal gantry recognized. Approaching yellow clearance phase in 8 seconds. Maintaining Webster progression balance.',
-          severity: 'normal' as const,
-          stats: { vehicles: 16, humans: 10, signal: 'AMBER CLEARANCE', countdown: 4, road: 'DRY • μ = 0.82', risk: 'LOW (14%)' },
+          category: 'signal',
+          title: 'Signal Timing & Phase Split Compliance',
+          detail: 'Signal Gantry 02 in GREEN split. Webster adaptive optimization maintains zero uncoordinated queue spillback.',
+          oralSummary: 'Signal gantry recognized. Phase split in optimal Webster synchronization with 20 seconds remaining.',
+          severity: 'normal',
+          confidence: 99.4,
+          trackId: 'SIG-GNT-02',
         },
         {
-          category: 'road' as const,
-          title: 'Roadway Surface & Lane Boundary Evaluation',
-          detail: 'Lane 1, 2, and 3 markings detected with 97% optical clarity. Roadway surface friction nominal at μ = 0.82.',
-          speech: 'Road surface scan complete. Lane boundaries clear, friction coefficient nominal with zero hydroplaning hazard.',
-          severity: 'normal' as const,
-          stats: { vehicles: 17, humans: 7, signal: 'GREEN (Phase 2)', countdown: 36, road: 'OPTIMAL • μ = 0.85', risk: 'MINIMAL (6%)' },
+          category: 'road',
+          title: 'Roadway Surface & Lane Marking Quality Scan',
+          detail: 'Surface condition verified as dry. Friction coefficient μ = 0.84. Pavement markings detected with 96% reflectivity.',
+          oralSummary: 'Roadway surface scan verified. Lane markings distinct, friction coefficient nominal with zero roadway hazards.',
+          severity: 'normal',
+          confidence: 98.1,
+          trackId: 'RD-TEX-204',
+          metrics: { frictionMu: 0.84 },
         },
         {
-          category: 'risk' as const,
-          title: 'Real-Time Collision Risk & Stopping Distance',
-          detail: 'Vehicles maintaining safe 2.4-second headway. Collision risk index rated at LOW. Safe stopping distance 68 feet.',
-          speech: 'Collision risk assessment nominal. Vehicles maintaining standard stopping headway. Zero critical anomalies.',
-          severity: 'normal' as const,
-          stats: { vehicles: 19, humans: 9, signal: 'GREEN (Phase 2)', countdown: 26, road: 'DRY • μ = 0.82', risk: 'LOW (9%)' },
-        },
-        {
-          category: 'object' as const,
-          title: 'Object Obstacle & Debris Scan',
-          detail: 'Surface scan confirms roadway clear of foreign debris, stalled cargo, or unauthorized barriers across all lanes.',
-          speech: 'Roadway obstacle scanner report. All lanes clear of debris and stationary road hazards.',
-          severity: 'normal' as const,
-          stats: { vehicles: 14, humans: 6, signal: 'GREEN (Phase 1)', countdown: 32, road: 'DRY • μ = 0.84', risk: 'MINIMAL (4%)' },
+          category: 'risk',
+          title: 'Collision Headway & Hazard Assessment',
+          detail: 'Real-time vehicle stopping distances well within 72-foot threshold. Collision hazard level assessed as MINIMAL.',
+          oralSummary: 'Collision risk evaluation complete. All moving platoons maintaining compliant stopping distance.',
+          severity: 'normal',
+          confidence: 99.0,
+          trackId: 'RSK-SEC-09',
+          metrics: { stoppingDistanceFt: 72 },
         },
       ];
 
-      const scenario = broadcastScenarios[cycleCount % broadcastScenarios.length];
-      setVisionStats({
-        vehiclesCount: scenario.stats.vehicles,
-        humansCount: scenario.stats.humans,
-        signalState: scenario.stats.signal,
-        signalCountdown: scenario.stats.countdown,
-        roadCondition: scenario.stats.road,
-        riskIndex: scenario.stats.risk,
-        objectsDetected: '0 Obstacles',
-        flowRateVph: 2400 + (cycleCount % 5) * 80,
-      });
+      const chosen = scenarios[cycleCount % scenarios.length];
+      addLogEntry(chosen);
 
-      addLog(scenario.category, scenario.title, scenario.detail, scenario.severity);
-      speakOralResponse(scenario.speech);
-    }, 8500);
+      if (oralInstructionsEnabled) {
+        setLastSpokenText(chosen.oralSummary);
+        speakAnnouncement(chosen.oralSummary, false);
+      }
+    }, 9000);
 
     return () => clearInterval(interval);
   }, [isCameraActive, oralInstructionsEnabled]);
 
-  // Canvas HUD overlay rendering on live webcam feed
+  // HUD Canvas Overlay Rendering
   useEffect(() => {
     if (!isCameraActive || !videoRef.current || !canvasRef.current) return;
 
@@ -307,7 +375,7 @@ export const CameraVisionModule: React.FC = () => {
       ctx.lineTo(canvas.width - 25, scanY);
       ctx.stroke();
 
-      // MULTI-TARGET DETECTION BOXES (Vehicles, Humans, Signals, Roads, Risk)
+      // Multi-Target Optical Bounding Boxes
       // 1. Vehicle Target
       ctx.strokeStyle = '#06b6d4';
       ctx.lineWidth = 2;
@@ -321,7 +389,7 @@ export const CameraVisionModule: React.FC = () => {
       ctx.font = '9px monospace';
       ctx.fillText('SPEED: 34.2 MPH • LANE 1', canvas.width * 0.15 + 4, canvas.height * 0.35 + 20);
 
-      // 2. Human / Pedestrian Target
+      // 2. Human Target
       ctx.strokeStyle = '#a855f7';
       ctx.strokeRect(canvas.width * 0.72, canvas.height * 0.40, 85, 120);
       ctx.fillStyle = 'rgba(168, 85, 247, 0.15)';
@@ -331,31 +399,31 @@ export const CameraVisionModule: React.FC = () => {
       ctx.fillText('[HUMAN: PEDESTRIAN 96%]', canvas.width * 0.72 - 10, canvas.height * 0.40 - 5);
       ctx.fillStyle = '#c084fc';
       ctx.font = '9px monospace';
-      ctx.fillText('CROSSWALK WAITING', canvas.width * 0.72 + 4, canvas.height * 0.40 + 20);
+      ctx.fillText('CROSSWALK QUEUE: 14', canvas.width * 0.72 + 4, canvas.height * 0.40 + 20);
 
-      // 3. Traffic Signal State Target
+      // 3. Signal Target
       ctx.strokeStyle = '#10b981';
       ctx.strokeRect(canvas.width * 0.45, canvas.height * 0.15, 90, 60);
-      ctx.fillStyle = 'rgba(16, 185, 129, 0.15)';
+      ctx.fillStyle = 'rgba(168, 85, 247, 0.15)';
       ctx.fillRect(canvas.width * 0.45, canvas.height * 0.15, 90, 60);
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 10px monospace';
       ctx.fillText('[SIGNAL: GREEN 99%]', canvas.width * 0.45, canvas.height * 0.15 - 5);
       ctx.fillStyle = '#34d399';
       ctx.font = '9px monospace';
-      ctx.fillText('COUNTDOWN: 24s', canvas.width * 0.45 + 4, canvas.height * 0.15 + 20);
+      ctx.fillText('HOLD: 22 SECONDS', canvas.width * 0.45 + 4, canvas.height * 0.15 + 20);
 
-      // 4. Road Surface & Risk Assessment Target
+      // 4. Roadway Target
       ctx.strokeStyle = '#f59e0b';
       ctx.strokeRect(canvas.width * 0.35, canvas.height * 0.70, 160, 45);
       ctx.fillStyle = 'rgba(245, 158, 11, 0.15)';
       ctx.fillRect(canvas.width * 0.35, canvas.height * 0.70, 160, 45);
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 10px monospace';
-      ctx.fillText('[ROAD: LANE BOUNDARY 97%]', canvas.width * 0.35, canvas.height * 0.70 - 5);
+      ctx.fillText('[ROAD: LANE 2 97%]', canvas.width * 0.35, canvas.height * 0.70 - 5);
       ctx.fillStyle = '#fbbf24';
       ctx.font = '9px monospace';
-      ctx.fillText('RISK: LOW • μ=0.82 NOMINAL', canvas.width * 0.35 + 4, canvas.height * 0.70 + 20);
+      ctx.fillText('FRICTION: μ=0.84 NOMINAL', canvas.width * 0.35 + 4, canvas.height * 0.70 + 20);
 
       animationFrameRef.current = requestAnimationFrame(renderHud);
     };
@@ -367,32 +435,58 @@ export const CameraVisionModule: React.FC = () => {
     };
   }, [isCameraActive]);
 
-  // Interactive Oral Questions Handler (Oral Voice Answers to Users)
-  const handleOralQuery = (queryType: string) => {
-    playHudClick();
-    let answerText = '';
-
-    switch (queryType) {
-      case 'risk':
-        answerText = 'Risk analysis confirmed. Intersection collision risk index is currently Low at 9 percent. Headway spacing and stopping sight distances meet all highway safety criteria.';
-        break;
-      case 'signals':
-        answerText = 'Signal gantry telemetry verified. North-South corridor is in Green phase with 24 seconds remaining. Webster dynamic split balance active.';
-        break;
-      case 'population':
-        answerText = 'Population census complete. 12 pedestrians detected at crosswalk waiting zone. Safe crosswalk clearance interval is armed and prioritized.';
-        break;
-      case 'creator':
-        answerText = 'This Intelligent Transportation System and AI Vision platform was engineered, developed, and designed by Iqra Sultana.';
-        break;
-      default:
-        answerText = 'Optical scanner report. 18 vehicles, clear roadways, functional traffic signals, nominal friction coefficient, and zero road debris detected.';
-        break;
-    }
-
-    addLog('oral', 'Operator Oral Query Answered', answerText, 'normal');
-    speakOralResponse(answerText);
+  // Export Audit Log to JSON file
+  const handleExportJSON = () => {
+    playSuccessChime();
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(logs, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', `UrbanFlow_AI_Vision_Audit_${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
   };
+
+  // Export Audit Log to CSV
+  const handleExportCSV = () => {
+    playSuccessChime();
+    const headers = ['ID', 'ISO_Timestamp', 'Category', 'Title', 'Confidence', 'TrackID', 'Oral_Summary'];
+    const rows = logs.map((l) => [
+      l.id,
+      l.isoTime,
+      l.category,
+      `"${l.title.replace(/"/g, '""')}"`,
+      `${l.confidence}%`,
+      l.trackId || 'N/A',
+      `"${l.oralSummary.replace(/"/g, '""')}"`,
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', encodeURI(csvContent));
+    downloadAnchor.setAttribute('download', `UrbanFlow_AI_Vision_Audit_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  // Generate Executive Oral Summary
+  const handleGenerateExecutiveSummary = () => {
+    playSuccessChime();
+    const summaryScript = `Executive Traffic & Vision Audit Report. The UrbanFlow optical monitoring grid has tracked ${logs.length} multi-modal events. Roadway friction is rated at zero point eight four with dry conditions. Traffic signals are operating under coordinated Webster cycle splits. Collision risk is evaluated as minimal across all metropolitan sectors. All operations are nominal.`;
+    setShowExecutiveModal(true);
+    speakAnnouncement(summaryScript, true);
+  };
+
+  // Filtered logs
+  const filteredLogs = logs.filter((item) => {
+    const matchesFilter = activeFilter === 'all' || item.category === activeFilter;
+    const matchesQuery = 
+      item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.detail.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.oralSummary.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.trackId && item.trackId.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchesFilter && matchesQuery;
+  });
 
   return (
     <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col gap-6">
@@ -415,13 +509,23 @@ export const CameraVisionModule: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              Autonomous multi-target detection: Vehicles, Roads, Signals, Population, Humans, Objects, Risk, and Spoken Oral Answers
+              Autonomous multi-target detection: Vehicles, Roads, Signals, Population, Objects, Collision Risk, and Auditable Oral Summaries
             </p>
           </div>
         </div>
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
+          {/* Executive Oral Summary Report Trigger */}
+          <button
+            onClick={handleGenerateExecutiveSummary}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 hover:border-cyan-500/40 transition cursor-pointer"
+            title="Generate AI Executive Oral Summary"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Executive Audit Report</span>
+          </button>
+
           {/* Oral Audio Toggle */}
           <button
             onClick={() => {
@@ -477,7 +581,7 @@ export const CameraVisionModule: React.FC = () => {
         </div>
       )}
 
-      {/* Main 2-Column Workstation: Video HUD Viewport + Detection Analytics */}
+      {/* Main 2-Column Workstation: Video HUD Viewport + Key Metrics */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* Left Column: Live Camera Video Viewport with Superimposed HUD Boxes */}
@@ -544,82 +648,27 @@ export const CameraVisionModule: React.FC = () => {
             </div>
             <div className="flex-1">
               <div className="text-[10px] font-mono text-cyan-400 uppercase tracking-wider font-bold">
-                Professional Oral Voice Agent Stream:
+                Professional Spoken Audio Broadcast:
               </div>
               <div className="text-xs font-medium text-slate-200 mt-0.5">
                 "{lastSpokenText}"
               </div>
             </div>
             <button
-              onClick={() => speakOralResponse(lastSpokenText)}
+              onClick={() => speakAnnouncement(lastSpokenText, false)}
               className="p-2 text-cyan-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer shrink-0"
-              title="Repeat Oral Instruction"
+              title="Repeat Spoken Broadcast"
             >
               <RotateCw className="w-4 h-4" />
             </button>
           </div>
-
-          {/* Interactive Oral Voice Query Prompts (Answer Users Orally) */}
-          <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4">
-            <div className="text-xs font-bold text-white mb-2 flex items-center gap-2">
-              <Mic className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Interactive Oral Inquiries (Click to hear AI verbal response):</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                onClick={() => handleOralQuery('risk')}
-                className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-left text-slate-300 hover:text-cyan-300 transition cursor-pointer"
-              >
-                <div className="font-semibold flex items-center gap-1.5">
-                  <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Analyze Collision Risk</span>
-                </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">Hear verbal risk assessment</div>
-              </button>
-
-              <button
-                onClick={() => handleOralQuery('signals')}
-                className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-left text-slate-300 hover:text-cyan-300 transition cursor-pointer"
-              >
-                <div className="font-semibold flex items-center gap-1.5">
-                  <Lightbulb className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Check Signal Gantry</span>
-                </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">Hear signal phase countdown</div>
-              </button>
-
-              <button
-                onClick={() => handleOralQuery('population')}
-                className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-left text-slate-300 hover:text-cyan-300 transition cursor-pointer"
-              >
-                <div className="font-semibold flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-purple-400" />
-                  <span>Population & Crosswalk</span>
-                </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">Hear pedestrian crowd audit</div>
-              </button>
-
-              <button
-                onClick={() => handleOralQuery('creator')}
-                className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-left text-slate-300 hover:text-cyan-300 transition cursor-pointer"
-              >
-                <div className="font-semibold flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>System Creator & Head</span>
-                </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">Hear provenance & developer</div>
-              </button>
-            </div>
-          </div>
         </div>
 
-        {/* Right Column: Multi-Target Detection Metrics & Real-Time Audit Log */}
+        {/* Right Column: Multi-Target Detection Metrics */}
         <div className="lg:col-span-5 flex flex-col gap-4">
-          
-          {/* Target Classification Cards */}
-          <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="grid grid-cols-2 gap-2.5 text-xs">
             {/* Vehicles */}
-            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3">
+            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5">
               <div className="text-[10px] text-slate-400 flex items-center justify-between">
                 <span>Vehicles Tracked</span>
                 <Car className="w-3.5 h-3.5 text-cyan-400" />
@@ -633,7 +682,7 @@ export const CameraVisionModule: React.FC = () => {
             </div>
 
             {/* Population / Humans */}
-            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3">
+            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5">
               <div className="text-[10px] text-slate-400 flex items-center justify-between">
                 <span>Population & Humans</span>
                 <User className="w-3.5 h-3.5 text-purple-400" />
@@ -647,7 +696,7 @@ export const CameraVisionModule: React.FC = () => {
             </div>
 
             {/* Traffic Signal State */}
-            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3">
+            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5">
               <div className="text-[10px] text-slate-400 flex items-center justify-between">
                 <span>Signals Optical State</span>
                 <Lightbulb className="w-3.5 h-3.5 text-emerald-400" />
@@ -661,7 +710,7 @@ export const CameraVisionModule: React.FC = () => {
             </div>
 
             {/* Roadway Surface & Risk */}
-            <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3">
+            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5">
               <div className="text-[10px] text-slate-400 flex items-center justify-between">
                 <span>Roads & Collision Risk</span>
                 <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
@@ -675,50 +724,310 @@ export const CameraVisionModule: React.FC = () => {
             </div>
           </div>
 
-          {/* Real-Time Detection Audit Log */}
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-            <span className="text-xs font-bold text-white flex items-center gap-2">
-              <Terminal className="w-4 h-4 text-cyan-400" />
-              <span>Multi-Target Vision Audit Log</span>
-            </span>
-            <span className="text-[10px] font-mono text-slate-400">
-              {logs.length} Event Stream
-            </span>
+          {/* Optical AI Detection Confidence Gauges */}
+          <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 space-y-3">
+            <div className="text-xs font-bold text-white flex items-center justify-between">
+              <span>Detection Confidence & Model Health</span>
+              <span className="text-[10px] font-mono text-cyan-400">YOLO-v11 / Vision-TOC</span>
+            </div>
+            
+            <div className="space-y-2 text-[11px]">
+              <div>
+                <div className="flex justify-between text-slate-300 mb-0.5">
+                  <span>Vehicle & Platoon Optical Extraction</span>
+                  <span className="font-mono text-cyan-400 font-bold">98.4%</span>
+                </div>
+                <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
+                  <div className="bg-cyan-500 h-full w-[98.4%]"></div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-slate-300 mb-0.5">
+                  <span>Pedestrian / Crosswalk Boundary Extraction</span>
+                  <span className="font-mono text-purple-400 font-bold">96.8%</span>
+                </div>
+                <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
+                  <div className="bg-purple-500 h-full w-[96.8%]"></div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-slate-300 mb-0.5">
+                  <span>Signal Head State Recognition</span>
+                  <span className="font-mono text-emerald-400 font-bold">99.2%</span>
+                </div>
+                <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
+                  <div className="bg-emerald-500 h-full w-[99.2%]"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* =========================================================================
+          EXTENDED SCROLLABLE ACTIVITY AUDIT LOG (Time-Stamped Detections & AI Oral Summaries)
+         ========================================================================= */}
+      <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 shadow-2xl flex flex-col gap-4">
+        
+        {/* Audit Log Controls Bar: Search, Category Filters, Export */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400">
+              <Terminal className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <span>Multi-Modal Optical Activity Log & Audit Trail</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold">
+                  {filteredLogs.length} Records
+                </span>
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                Time-stamped optical detections, telemetry metrics, and AI-generated oral summaries for municipal auditability
+              </p>
+            </div>
           </div>
 
-          <div className="flex-1 max-h-[300px] overflow-y-auto space-y-2.5 pr-1">
-            {logs.map((log) => (
-              <div
-                key={log.id}
-                className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3 text-xs space-y-1 hover:border-slate-700 transition"
+          {/* Export Actions */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportJSON}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition cursor-pointer"
+              title="Download Full Audit Trail in JSON"
+            >
+              <Download className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Export JSON</span>
+            </button>
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition cursor-pointer"
+              title="Download Full Audit Trail in CSV"
+            >
+              <FileText className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Export CSV</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Filter Pills & Keyword Search */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Category Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1">
+            {[
+              { id: 'all', label: 'All Detections' },
+              { id: 'vehicle', label: 'Vehicles' },
+              { id: 'human', label: 'Humans & Crowd' },
+              { id: 'signal', label: 'Traffic Signals' },
+              { id: 'road', label: 'Road Surface' },
+              { id: 'risk', label: 'Collision Risk' },
+              { id: 'oral', label: 'Oral Summaries' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  playHudClick();
+                  setActiveFilter(tab.id as any);
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium font-mono shrink-0 transition cursor-pointer ${
+                  activeFilter === tab.id
+                    ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
+                    : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+                }`}
               >
-                <div className="flex items-center justify-between text-[10px] font-mono">
-                  <span
-                    className={`font-bold px-1.5 py-0.2 rounded uppercase ${
-                      log.category === 'vehicle'
-                        ? 'bg-cyan-500/20 text-cyan-300'
-                        : log.category === 'human'
-                        ? 'bg-purple-500/20 text-purple-300'
-                        : log.category === 'signal'
-                        ? 'bg-emerald-500/20 text-emerald-300'
-                        : log.category === 'road'
-                        ? 'bg-blue-500/20 text-blue-300'
-                        : 'bg-amber-500/20 text-amber-300'
-                    }`}
-                  >
-                    {log.category}
-                  </span>
-                  <span className="text-slate-400">{log.timestamp}</span>
-                </div>
-                <div className="font-bold text-white text-[12px]">{log.title}</div>
-                <p className="text-slate-400 text-[11px] leading-relaxed">{log.detail}</p>
-              </div>
+                {tab.label}
+              </button>
             ))}
           </div>
 
+          {/* Keyword Search Input */}
+          <div className="relative w-full sm:w-64">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search detections or track ID..."
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-sans"
+            />
+          </div>
         </div>
 
+        {/* Scrollable Audit Log Entries List */}
+        <div className="max-h-[380px] overflow-y-auto space-y-3 pr-1.5 scrollbar-thin">
+          {filteredLogs.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-500 bg-slate-900/40 rounded-2xl border border-slate-800/80">
+              No detection records matching the current filter or search criteria.
+            </div>
+          ) : (
+            filteredLogs.map((item) => (
+              <div
+                key={item.id}
+                className="bg-slate-900/80 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-4 transition-all flex flex-col gap-2.5"
+              >
+                {/* Entry Top Row: Tag, Track ID, Timestamp, and Listen Button */}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded border ${
+                        item.category === 'vehicle'
+                          ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                          : item.category === 'human'
+                          ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                          : item.category === 'signal'
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                          : item.category === 'road'
+                          ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                          : item.category === 'risk'
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                          : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+                      }`}
+                    >
+                      {item.category}
+                    </span>
+
+                    {item.trackId && (
+                      <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                        {item.trackId}
+                      </span>
+                    )}
+
+                    <span className="text-[10px] font-mono text-emerald-400 font-bold">
+                      {item.confidence}% Confidence
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {/* Timestamp */}
+                    <div className="text-[11px] font-mono text-slate-400 flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-slate-500" />
+                      <span>{item.timestamp}</span>
+                      <span className="text-slate-600">({item.isoTime.slice(11, 19)}Z)</span>
+                    </div>
+
+                    {/* Listen to Oral Summary Button */}
+                    <button
+                      onClick={() => handlePlayLogOral(item)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold transition cursor-pointer border ${
+                        playingLogId === item.id
+                          ? 'bg-cyan-500 text-slate-950 border-cyan-400 animate-pulse'
+                          : 'bg-slate-950 hover:bg-slate-800 text-cyan-300 border-slate-800 hover:border-cyan-500/40'
+                      }`}
+                      title="Listen to this event's AI Oral Summary"
+                    >
+                      <Volume2 className="w-3.5 h-3.5" />
+                      <span>{playingLogId === item.id ? 'Playing...' : 'Play Oral Audio'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Title & Technical Observation */}
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-white">{item.title}</h4>
+                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">{item.detail}</p>
+                </div>
+
+                {/* AI-Generated Oral Summary Script Box */}
+                <div className="bg-slate-950/90 rounded-xl p-3 border border-slate-800/90 flex items-start gap-2.5 text-xs">
+                  <div className="p-1 rounded-lg bg-cyan-500/10 text-cyan-400 shrink-0 mt-0.5">
+                    <Volume2 className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="flex-1">
+                    <span className="text-[10px] font-mono text-cyan-400 uppercase tracking-wider font-bold block mb-0.5">
+                      AI-Generated Oral Speech Script:
+                    </span>
+                    <span className="text-slate-300 italic leading-relaxed">
+                      "{item.oralSummary}"
+                    </span>
+                  </div>
+                </div>
+
+                {/* Metrics Pill Strip (if available) */}
+                {item.metrics && (
+                  <div className="flex flex-wrap gap-2 text-[10px] font-mono text-slate-400 pt-1">
+                    {item.metrics.velocityMph !== undefined && (
+                      <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-cyan-300">
+                        VELOCITY: {item.metrics.velocityMph} MPH
+                      </span>
+                    )}
+                    {item.metrics.headwaySec !== undefined && (
+                      <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-emerald-300">
+                        HEADWAY: {item.metrics.headwaySec}s
+                      </span>
+                    )}
+                    {item.metrics.frictionMu !== undefined && (
+                      <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-blue-300">
+                        SURFACE FRICTION: μ = {item.metrics.frictionMu}
+                      </span>
+                    )}
+                    {item.metrics.stoppingDistanceFt !== undefined && (
+                      <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-amber-300">
+                        STOPPING SIGHT DIST: {item.metrics.stoppingDistanceFt} FT
+                      </span>
+                    )}
+                    {item.metrics.pedestrianCount !== undefined && (
+                      <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-purple-300">
+                        CROWD COUNT: {item.metrics.pedestrianCount} PEDESTRIANS
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
       </div>
+
+      {/* Executive Oral Audit Modal */}
+      {showExecutiveModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-xl p-6 shadow-2xl flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-base">Executive Optical Audit Report</h3>
+                  <p className="text-xs text-slate-400">Oral speech synthesis broadcast summary</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowExecutiveModal(false)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-xs text-slate-200 leading-relaxed space-y-2">
+              <div className="text-[11px] font-mono text-cyan-400 font-bold uppercase">
+                Broadcast Transcript:
+              </div>
+              <p>
+                "Executive Traffic & Vision Audit Report. The UrbanFlow optical monitoring grid has tracked {logs.length} multi-modal events. Roadway friction is rated at zero point eight four with dry conditions. Traffic signals are operating under coordinated Webster cycle splits. Collision risk is evaluated as minimal across all metropolitan sectors. All operations are nominal."
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => speakAnnouncement(`Executive Traffic & Vision Audit Report. The UrbanFlow optical monitoring grid has tracked ${logs.length} multi-modal events. All operations nominal.`, false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 cursor-pointer flex items-center gap-1.5"
+              >
+                <Volume2 className="w-3.5 h-3.5" />
+                <span>Replay Spoken Audio</span>
+              </button>
+              <button
+                onClick={() => setShowExecutiveModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 cursor-pointer"
+              >
+                Close Report
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
