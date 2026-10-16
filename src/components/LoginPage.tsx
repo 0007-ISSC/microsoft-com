@@ -33,9 +33,9 @@ interface LoginPageProps {
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
-  const [username, setUsername] = useState('Iqra Sultana');
-  const [email, setEmail] = useState('iqrasultana0007@gmail.com');
-  const [password, setPassword] = useState('UrbanFlow#2026');
+  const [username, setUsername] = useState('demo');
+  const [email, setEmail] = useState('demo@urbanflow.its');
+  const [password, setPassword] = useState('demo123');
   const [showPassword, setShowPassword] = useState(false);
   const [selectedRole, setSelectedRole] = useState('Chief Traffic Operations Commander');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
@@ -222,7 +222,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="e.g. Iqra Sultana or Operator 07"
+                  placeholder="e.g. demo or demo_operator"
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-white font-mono focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
                   required
                 />
@@ -311,18 +311,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => handleQuickFill('Iqra Sultana', 'iqrasultana0007@gmail.com', 'UrbanFlow#2026', 'Chief Traffic Operations Commander')}
+                  onClick={() => handleQuickFill('demo', 'demo@urbanflow.its', 'demo123', 'Chief Traffic Operations Commander')}
                   className="text-cyan-400 hover:underline font-mono"
                 >
-                  Lead Engineer
+                  Demo Admin
                 </button>
                 <span>•</span>
                 <button
                   type="button"
-                  onClick={() => handleQuickFill('TOC Controller', 'controller@urbanflow.its', 'SecurePass2026', 'Adaptive Webster Optimization Lead')}
+                  onClick={() => handleQuickFill('demo_operator', 'demo.operator@urbanflow.its', 'demo123', 'Adaptive Webster Optimization Lead')}
                   className="text-cyan-400 hover:underline font-mono"
                 >
-                  TOC Operator
+                  Demo Operator
                 </button>
               </div>
             </div>
